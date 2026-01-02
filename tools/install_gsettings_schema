@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Helper script to install Onboard's gsettings schema for local testing.
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: install_gsettings_schema [--user|--system|--dest PATH]
+
+Install org.onboard.gschema.xml into a writable schema directory and
+run glib-compile-schemas on that directory.
+
+Options:
+  --user      Install into $XDG_DATA_HOME/glib-2.0/schemas (default).
+  --system    Install into /usr/local/share/glib-2.0/schemas (requires sudo).
+  --dest PATH Install into the given PATH.
+  -h, --help  Show this help text.
+
+Examples:
+  ./tools/install_gsettings_schema --user
+  sudo ./tools/install_gsettings_schema --system
+EOF
+}
+
+install_mode="user"
+target_dir=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --user)
+            install_mode="user"
+            target_dir=""
+            shift
+            ;;
+        --system)
+            install_mode="system"
+            target_dir=""
+            shift
+            ;;
+        --dest)
+            if [[ $# -lt 2 ]]; then
+                echo "install_gsettings_schema: missing argument for --dest" >&2
+                usage >&2
+                exit 1
+            fi
+            target_dir="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo "install_gsettings_schema: unknown option '$1'" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$target_dir" ]]; then
+    if [[ "$install_mode" == "system" ]]; then
+        target_dir="/usr/local/share/glib-2.0/schemas"
+    else
+        target_dir="${XDG_DATA_HOME:-$HOME/.local/share}/glib-2.0/schemas"
+    fi
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+project_root="$(cd "$script_dir/.." && pwd)"
+schema_src="$project_root/data/org.onboard.gschema.xml"
+
+if [[ ! -f "$schema_src" ]]; then
+    echo "install_gsettings_schema: schema file not found at $schema_src" >&2
+    exit 1
+fi
+
+if ! command -v glib-compile-schemas >/dev/null 2>&1; then
+    echo "install_gsettings_schema: glib-compile-schemas not found in PATH" >&2
+    exit 1
+fi
+
+mkdir -p "$target_dir"
+cp "$schema_src" "$target_dir/"
+glib-compile-schemas "$target_dir"
+
+echo "GSettings schema installed to $target_dir"
